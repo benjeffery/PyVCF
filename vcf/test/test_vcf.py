@@ -751,8 +751,25 @@ class TestUtils(unittest.TestCase):
             self.assertEqual(utils.trim_common_suffix(*sequences.split()),
                              expected.split())
 
+class TestSelectiveSampleParsing(unittest.TestCase):
 
+    def test_parse_all(self):
+        all_samples = ['NA00001', 'NA00002', 'NA00003']
+        depths = [1,8,5]
+        reader = vcf.Reader(fh('example-4.0.vcf'))
+        self.assertEqual(reader.samples, all_samples)
+        rec = reader.next()
+        for sample, depth in zip(all_samples, depths):
+            self.assertEqual(rec.genotype(sample).data.DP, depth)
 
+    def test_parse_subset(self):
+        sub_samples = ['NA00003', 'NA00001']
+        sub_depths = [5,1]
+        reader = vcf.Reader(fh('example-4.0.vcf'), wanted_samples = sub_samples)
+        self.assertEqual(reader.samples, sub_samples)
+        rec = reader.next()
+        for sample, depth in zip(sub_samples, sub_depths):
+            self.assertEqual(rec.genotype(sample).data.DP, depth)
 
 suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestGatkOutput))
 suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestFreebayesOutput))
@@ -766,3 +783,4 @@ suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestRecord))
 suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestCall))
 suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestRegression))
 suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestVcfSpecs))
+suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestSelectiveSampleParsing))

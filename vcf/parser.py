@@ -172,7 +172,7 @@ class _vcf_metadata_parser(object):
 class Reader(object):
     """ Reader for a VCF v 4.0 file, an iterator returning ``_Record objects`` """
 
-    def __init__(self, fsock=None, filename=None, compressed=False, prepend_chr=False):
+    def __init__(self, fsock=None, filename=None, compressed=False, prepend_chr=False, wanted_samples=tuple()):
         """ Create a new Reader for a VCF file.
 
             You must specify either fsock (stream) or filename.  Gzipped streams
@@ -213,6 +213,7 @@ class Reader(object):
         self._header_lines = []
         self._tabix = None
         self._prepend_chr = prepend_chr
+        self._wanted_samples = wanted_samples
         self._parse_metainfo()
         self._format_cache = {}
 
@@ -262,8 +263,11 @@ class Reader(object):
             line = self.reader.next()
 
         fields = re.split('\t| +', line.rstrip())
-        self.samples = fields[9:]
-        self._sample_indexes = dict([(x,i) for (i,x) in enumerate(self.samples)])
+        file_samples = fields[9:]
+        file_sample_indexes = dict([(x,i) for (i,x) in enumerate(file_samples)])
+        self.samples = self._wanted_samples or file_samples
+        self._sample_indexes = self._sample_indexes = dict([(x,i) for (i,x) in enumerate(self.samples)])
+        self._file_sample_indexes = [file_sample_indexes[i] for i in self.samples]
 
     def _map(self, func, iterable, bad='.'):
         '''``map``, but make bad values None.'''
@@ -472,7 +476,7 @@ class Reader(object):
                 info, fmt, self._sample_indexes)
 
         if fmt is not None:
-            samples = self._parse_samples(row[9:], fmt, record)
+            samples = self._parse_samples([row[9:][i] for i in self._file_sample_indexes], fmt, record)
             record.samples = samples
 
         return record
