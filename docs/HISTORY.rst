@@ -17,6 +17,37 @@ New features should have test code sent with them.
 Changes
 =======
 
+0.6.3 Release
+-------------
+
+* cython port of #79
+* correct writing of meta lines #84 
+
+0.6.2 Release
+-------------
+
+* issues #78, #79 (thanks Sean, Brad) 
+
+0.6.1 Release
+-------------
+
+* Add strict whitespace mode for well formed VCFs with spaces 
+  in sample names (thanks Marco)
+* Ignore blank lines in files (thanks Martijn)
+* Tweaks for handling missing data (thanks Sean)
+* bcftools tests (thanks Martijn)
+* record.FILTER is always a list
+
+0.6.0 Release
+-------------
+
+* Backwards incompatible change: _Call.data is now a 
+  namedtuple (previously it was a dict)
+* Optional cython version, much improved performance.  
+* Improvements to writer (thanks @cmclean)
+* Improvements to inheritance of classes (thanks @lennax)
+
+
 0.5.0 Release
 -------------
 

@@ -192,6 +192,8 @@ class Test1kg(unittest.TestCase):
     def testParse(self):
         reader = vcf.Reader(fh('1kg.vcf.gz', 'rb'))
 
+        assert 'FORMAT' in reader._column_headers
+
         self.assertEqual(len(reader.samples), 629)
         for _ in reader:
             pass
@@ -205,11 +207,75 @@ class Test1kg(unittest.TestCase):
             pass
 
 
-class TestWriter(unittest.TestCase):
+class Test1kgSites(unittest.TestCase):
+
+    def test_reader(self):
+        """The samples attribute should be the empty list."""
+        reader = vcf.Reader(fh('1kg.sites.vcf', 'r'))
+
+        assert 'FORMAT' not in reader._column_headers
+
+        self.assertEqual(reader.samples, [])
+        for record in reader:
+            self.assertEqual(record.samples, [])
+
+    def test_writer(self):
+        """FORMAT should not be written if not present in the template and no
+        extra tab character should be printed if there are no FORMAT fields."""
+        reader = vcf.Reader(fh('1kg.sites.vcf', 'r'))
+        out = StringIO()
+        writer = vcf.Writer(out, reader, lineterminator='\n')
+
+        for record in reader:
+            writer.write_record(record)
+        out.seek(0)
+        out_str = out.getvalue()
+        for line in out_str.split('\n'):
+            if line.startswith('##'):
+                continue
+            if line.startswith('#CHROM'):
+                assert 'FORMAT' not in line
+            assert not line.endswith('\t')
+
+
+class TestGatkOutputWriter(unittest.TestCase):
 
     def testWrite(self):
 
         reader = vcf.Reader(fh('gatk.vcf'))
+        out = StringIO()
+        writer = vcf.Writer(out, reader)
+
+        records = list(reader)
+
+        for record in records:
+            writer.write_record(record)
+        out.seek(0)
+        out_str = out.getvalue()
+        for line in out_str.split("\n"):
+            if line.startswith("##contig"):
+                assert line.startswith('##contig=<'), "Found dictionary in contig line: {0}".format(line)
+        print (out_str)
+        reader2 = vcf.Reader(out)
+
+        self.assertEquals(reader.samples, reader2.samples)
+        self.assertEquals(reader.formats, reader2.formats)
+        self.assertEquals(reader.infos, reader2.infos)
+
+        for l, r in zip(records, reader2):
+            self.assertEquals(l.samples, r.samples)
+
+            # test for call data equality, since equality on the sample calls
+            # may not always mean their data are all equal
+            for l_call, r_call in zip(l.samples, r.samples):
+                self.assertEqual(l_call.data, r_call.data)
+
+
+class TestBcfToolsOutputWriter(unittest.TestCase):
+
+    def testWrite(self):
+
+        reader = vcf.Reader(fh('bcftools.vcf'))
         out = StringIO()
         writer = vcf.Writer(out, reader)
 
@@ -227,6 +293,41 @@ class TestWriter(unittest.TestCase):
 
         for l, r in zip(records, reader2):
             self.assertEquals(l.samples, r.samples)
+
+            # test for call data equality, since equality on the sample calls
+            # may not always mean their data are all equal
+            for l_call, r_call in zip(l.samples, r.samples):
+                self.assertEqual(l_call.data, r_call.data)
+
+
+class TestWriterDictionaryMeta(unittest.TestCase):
+
+    def testWrite(self):
+
+        reader = vcf.Reader(fh('example-4.1-bnd.vcf'))
+        out = StringIO()
+        writer = vcf.Writer(out, reader)
+
+        records = list(reader)
+
+        for record in records:
+            writer.write_record(record)
+        out.seek(0)
+        out_str = out.getvalue()
+        for line in out_str.split("\n"):
+            if line.startswith("##PEDIGREE"):
+                self.assertEquals(line, '##PEDIGREE=<Derived="Tumor",Original="Germline">')
+            if line.startswith("##SAMPLE"):
+                assert line.startswith('##SAMPLE=<'), "Found dictionary in meta line: {0}".format(line)
+
+
+class TestSamplesSpace(unittest.TestCase):
+    filename = 'samples-space.vcf'
+    samples = ['NA 00001', 'NA 00002', 'NA 00003']
+    def test_samples(self):
+        self.reader = vcf.Reader(fh(self.filename), strict_whitespace=True)
+        self.assertEqual(self.reader.samples, self.samples)
+
 
 class TestRecord(unittest.TestCase):
 
@@ -521,6 +622,22 @@ class TestRecord(unittest.TestCase):
             self.assertEqual(expected, qual)
             self.assertEqual(type(expected), qtype)
 
+    def test_info_multiple_values(self):
+        reader = vcf.Reader(fh('example-4.1-info-multiple-values.vcf'))
+        var = reader.next()
+        # check Float type INFO field with multiple values
+        expected = [19.3, 47.4, 14.0]
+        actual = var.INFO['RepeatCopies']
+        self.assertEqual(expected, actual)
+        # check Integer type INFO field with multiple values
+        expected = [42, 14, 56]
+        actual = var.INFO['RepeatSize']
+        self.assertEqual(expected, actual)
+        # check String type INFO field with multiple values
+        expected = ['TCTTATCTTCTTACTTTTCATTCCTTACTCTTACTTACTTAC', 'TTACTCTTACTTAC', 'TTACTCTTACTTACTTACTCTTACTTACTTACTCTTACTTACTTACTCTTATCTTC']
+        actual = var.INFO['RepeatConsensus']
+        self.assertEqual(expected, actual)
+
 
 class TestCall(unittest.TestCase):
 
@@ -774,11 +891,16 @@ class TestSelectiveSampleParsing(unittest.TestCase):
 suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestGatkOutput))
 suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestFreebayesOutput))
 suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestSamtoolsOutput))
-suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestWriter))
+suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestBcfToolsOutput))
+suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestGatkOutputWriter))
+suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestBcfToolsOutputWriter))
+suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestWriterDictionaryMeta))
 suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestTabix))
 suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestOpenMethods))
 suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestFilter))
 suite.addTests(unittest.TestLoader().loadTestsFromTestCase(Test1kg))
+suite.addTests(unittest.TestLoader().loadTestsFromTestCase(Test1kgSites))
+suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestSamplesSpace))
 suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestRecord))
 suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestCall))
 suite.addTests(unittest.TestLoader().loadTestsFromTestCase(TestRegression))
